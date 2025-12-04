@@ -13,20 +13,41 @@ import { initializeSocket } from './socket';
 
 dotenv.config();
 
+const allowedOrigins = [
+    process.env.FRONTEND_URL,                  // from Render env
+    'https://chat-box-seven-jade.vercel.app',  // your Vercel app
+    'http://localhost:3000'                    // local dev
+].filter(Boolean) as string[];
+
+
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
     cors: {
-        origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-        credentials: true
-    }
+        origin: allowedOrigins,
+        credentials: true,
+    },
 });
 
+
 // Middleware
-app.use(cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-    credentials: true
-}));
+app.use(
+    cors({
+        origin: (origin, callback) => {
+            // Allow requests with no origin (like mobile apps, curl, etc.)
+            if (!origin) return callback(null, true);
+
+            if (allowedOrigins.includes(origin)) {
+                return callback(null, true);
+            }
+
+            console.log('❌ Blocked by CORS:', origin);
+            return callback(new Error('Not allowed by CORS'));
+        },
+        credentials: true,
+    })
+);
+
 app.use(express.json());
 
 // Routes
