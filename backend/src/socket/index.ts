@@ -155,6 +155,94 @@ export const initializeSocket = (io: Server) => {
             }
         });
 
+        // --- Direct Messaging Events ---
+
+        // Handle joining a conversation
+        socket.on('join_conversation', async (conversationId: string) => {
+            try {
+                const conversation = await Conversation.findById(conversationId);
+                if (conversation && conversation.participants.some(p => p.toString() === userId)) {
+                    socket.join(conversationId);
+                    console.log(`User ${userId} joined conversation ${conversationId}`);
+                } else {
+                    console.log(`User ${userId} failed to join conversation ${conversationId}`);
+                }
+            } catch (error) {
+                console.error('Join conversation error:', error);
+            }
+        });
+
+        // Handle leaving a conversation
+        socket.on('leave_conversation', (conversationId: string) => {
+            socket.leave(conversationId);
+            console.log(`User ${userId} left conversation ${conversationId}`);
+        });
+
+        // Handle sending a direct message
+        socket.on('send_direct_message', async (data: { conversationId: string; content: string }) => {
+            try {
+                const { conversationId, content } = data;
+
+                if (!content || content.trim().length === 0) {
+                    return;
+                }
+
+                // Verify conversation and participation
+                const conversation = await Conversation.findById(conversationId);
+                if (!conversation || !conversation.participants.some(p => p.toString() === userId)) {
+                    return;
+                }
+
+                // Create message
+                const message = await DirectMessage.create({
+                    conversation: conversationId,
+                    sender: userId,
+                    content: content.trim(),
+                    readBy: [userId]
+                });
+
+                await message.populate('sender', 'username email');
+
+                // Update conversation last message
+                await Conversation.findByIdAndUpdate(conversationId, {
+                    lastMessage: {
+                        content: content.trim(),
+                        sender: userId,
+                        createdAt: new Date()
+                    },
+                    updatedAt: new Date()
+                });
+
+                // Broadcast to conversation room
+                console.log(`Socket: Broadcasting DM to conversation ${conversationId}`);
+                io.to(conversationId).emit('new_direct_message', message);
+
+            } catch (error) {
+                console.error('Send DM error:', error);
+            }
+        });
+
+        // Handle DM typing
+        socket.on('typing_dm', async (data: { conversationId: string; isTyping: boolean }) => {
+            try {
+                const { conversationId, isTyping } = data;
+
+                // Verify participation
+                const conversation = await Conversation.findById(conversationId);
+                if (!conversation || !conversation.participants.some(p => p.toString() === userId)) {
+                    return;
+                }
+
+                socket.to(conversationId).emit('typing_dm_update', {
+                    conversationId,
+                    userId,
+                    isTyping
+                });
+            } catch (error) {
+                console.error('DM typing error:', error);
+            }
+        });
+
         // Handle channel created (broadcast to all)
         socket.on('channel_created', async (channel: any) => {
             io.emit('new_channel', channel);

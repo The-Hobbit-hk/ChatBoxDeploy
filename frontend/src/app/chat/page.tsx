@@ -21,6 +21,7 @@ export default function ChatPage() {
     const setChannels = useChatStore((state) => state.setChannels);
     const addChannel = useChatStore((state) => state.addChannel);
     const addMessage = useChatStore((state) => state.addMessage);
+    const addDMMessage = useChatStore((state) => state.addDMMessage);
     const setOnlineUsers = useChatStore((state) => state.setOnlineUsers);
     const updateUserStatus = useChatStore((state) => state.updateUserStatus);
     const setTypingUsers = useChatStore((state) => state.setTypingUsers);
@@ -77,6 +78,30 @@ export default function ChatPage() {
                 // Listen for typing updates
                 socket.on('typing_update', (data: { channelId: string; typingUsers: string[] }) => {
                     setTypingUsers(data.typingUsers);
+                });
+
+                // Listen for new direct messages
+                socket.on('new_direct_message', (message: any) => {
+                    console.log('Socket: Received new_direct_message:', message);
+                    addDMMessage(message);
+                });
+
+                // Listen for DM typing updates
+                socket.on('typing_dm_update', (data: { conversationId: string; userId: string; isTyping: boolean }) => {
+                    // For now, we can reuse setTypingUsers if we want to show typing in DMs similarly
+                    // But the store expects a list of userIds.
+                    // The backend sends { conversationId, userId, isTyping }
+                    // We might need to handle this differently or update store to support DM typing properly.
+                    // For simplicity, let's just log it for now or implement a basic version.
+
+                    // Actually, let's just use the same typingUsers state for now, assuming only one conversation/channel is active.
+                    // But we need to manage the list.
+                    // The current implementation of setTypingUsers replaces the whole list.
+                    // The channel implementation sends the whole list from backend.
+                    // The DM implementation sends incremental updates.
+
+                    // Let's just log for now to avoid breaking things, as the store expects a full list.
+                    console.log('Socket: Received typing_dm_update:', data);
                 });
             }
 

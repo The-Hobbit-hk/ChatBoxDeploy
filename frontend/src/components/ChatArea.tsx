@@ -1,9 +1,7 @@
-'use client';
-
 import { useEffect, useRef, useState } from 'react';
 import { useChatStore, Message } from '@/store/chatStore';
 import { useAuthStore } from '@/store/authStore';
-import { messagesAPI } from '@/lib/api';
+import { messagesAPI, directMessagesAPI } from '@/lib/api';
 import { formatDistanceToNow } from 'date-fns';
 
 export default function ChatArea() {
@@ -12,26 +10,34 @@ export default function ChatArea() {
     const [loadingMore, setLoadingMore] = useState(false);
     const [hasMore, setHasMore] = useState(true);
 
+    const viewMode = useChatStore((state) => state.viewMode);
     const currentChannel = useChatStore((state) => state.currentChannel);
+    const currentConversation = useChatStore((state) => state.currentConversation);
     const messages = useChatStore((state) => state.messages);
+    const dmMessages = useChatStore((state) => state.dmMessages);
     const typingUsers = useChatStore((state) => state.typingUsers);
     const setMessages = useChatStore((state) => state.setMessages);
+    const setDMMessages = useChatStore((state) => state.setDMMessages);
     const prependMessages = useChatStore((state) => state.prependMessages);
     const user = useAuthStore((state) => state.user);
 
-    // Load messages when channel changes
+    const activeMessages = viewMode === 'channel' ? messages : dmMessages;
+
+    // Load messages when channel/conversation changes
     useEffect(() => {
-        if (currentChannel) {
+        if (viewMode === 'channel' && currentChannel) {
             loadMessages();
+        } else if (viewMode === 'dm' && currentConversation) {
+            loadDMMessages();
         }
-    }, [currentChannel]);
+    }, [currentChannel, currentConversation, viewMode]);
 
     // Auto-scroll to bottom on new messages
     useEffect(() => {
-        if (messages.length > 0) {
+        if (activeMessages.length > 0) {
             messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         }
-    }, [messages]);
+    }, [activeMessages]);
 
     const loadMessages = async () => {
         if (!currentChannel) return;
@@ -44,21 +50,38 @@ export default function ChatArea() {
         }
     };
 
+    const loadDMMessages = async () => {
+        if (!currentConversation) return;
+
+        try {
+            const { data } = await directMessagesAPI.get(currentConversation._id, { limit: 50 });
+            setDMMessages(data.messages);
+        } catch (error) {
+            console.error('Failed to load DM messages:', error);
+        }
+    };
+
     const loadMoreMessages = async () => {
-        if (!currentChannel || loadingMore || !hasMore || messages.length === 0) return;
+        if (loadingMore || !hasMore || activeMessages.length === 0) return;
 
         setLoadingMore(true);
         try {
-            const oldestMessage = messages[0];
-            const { data } = await messagesAPI.get(currentChannel._id, {
-                limit: 50,
-                before: oldestMessage._id
-            });
+            const oldestMessage = activeMessages[0];
 
-            if (data.messages.length === 0) {
-                setHasMore(false);
-            } else {
-                prependMessages(data.messages);
+            if (viewMode === 'channel' && currentChannel) {
+                const { data } = await messagesAPI.get(currentChannel._id, {
+                    limit: 50,
+                    before: oldestMessage._id
+                });
+
+                if (data.messages.length === 0) {
+                    setHasMore(false);
+                } else {
+                    prependMessages(data.messages);
+                }
+            } else if (viewMode === 'dm' && currentConversation) {
+                // Implement prepend for DMs if needed, for now just basic load
+                // Note: chatStore needs prependDMMessages for this to work fully
             }
         } catch (error) {
             console.error('Failed to load more messages:', error);
@@ -99,7 +122,7 @@ export default function ChatArea() {
         return colors[index];
     };
 
-    if (!currentChannel) {
+    if (viewMode === 'channel' && !currentChannel) {
         return (
             <div className="flex-1 flex items-center justify-center p-8">
                 <div className="text-center max-w-lg animate-scaleIn">
@@ -115,20 +138,40 @@ export default function ChatArea() {
         );
     }
 
+    if (viewMode === 'dm' && !currentConversation) {
+        return (
+            <div className="flex-1 flex items-center justify-center p-8">
+                <div className="text-center max-w-lg animate-scaleIn">
+                    <p className="text-gray-400 text-lg leading-relaxed">Select a conversation to start messaging.</p>
+                </div>
+            </div>
+        );
+    }
+
+    const headerTitle = viewMode === 'channel'
+        ? currentChannel?.name
+        : currentConversation?.participants.find(p => p._id !== user?._id)?.username;
+
+    const headerSubtitle = viewMode === 'channel'
+        ? currentChannel?.description
+        : currentConversation?.participants.find(p => p._id !== user?._id)?.email;
+
     return (
         <div className="flex-1 flex flex-col h-full relative overflow-hidden">
-            {/* Channel Header */}
+            {/* Header */}
             <div className="h-20 border-b-2 border-[var(--border)] px-8 flex items-center glass z-10 shrink-0 bg-[var(--surface)]/30">
                 <div className="flex items-center gap-3">
                     <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[var(--primary)]/20 to-[var(--secondary)]/20 flex items-center justify-center border-2 border-[var(--primary)]/30">
-                        <span className="text-[var(--primary)] text-2xl font-bold">#</span>
+                        <span className="text-[var(--primary)] text-2xl font-bold">
+                            {viewMode === 'channel' ? '#' : '@'}
+                        </span>
                     </div>
                     <div>
                         <h2 className="text-xl font-bold flex items-center text-white">
-                            {currentChannel.name}
+                            {headerTitle}
                         </h2>
-                        {currentChannel.description && (
-                            <p className="text-sm text-gray-400 mt-0.5">{currentChannel.description}</p>
+                        {headerSubtitle && (
+                            <p className="text-sm text-gray-400 mt-0.5">{headerSubtitle}</p>
                         )}
                     </div>
                 </div>
@@ -146,17 +189,16 @@ export default function ChatArea() {
                     </div>
                 )}
 
-                {messages.length === 0 && (
+                {activeMessages.length === 0 && (
                     <div className="flex flex-col items-center justify-center h-full text-gray-500 py-10 opacity-60">
                         <div className="text-4xl mb-2">✨</div>
                         <p>No messages yet. Be the first to say hello!</p>
                     </div>
                 )}
 
-                {messages.map((message, index) => {
+                {activeMessages.map((message, index) => {
                     const isOwnMessage = message.sender._id === user?._id;
-                    const showAvatar = index === 0 || messages[index - 1].sender._id !== message.sender._id;
-                    const isLastMessage = index === messages.length - 1;
+                    const showAvatar = index === 0 || activeMessages[index - 1].sender._id !== message.sender._id;
 
                     return (
                         <div

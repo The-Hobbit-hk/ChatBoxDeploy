@@ -10,7 +10,10 @@ export default function MessageInput() {
     const [isTyping, setIsTyping] = useState(false);
     const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    const viewMode = useChatStore((state) => state.viewMode);
     const currentChannel = useChatStore((state) => state.currentChannel);
+    const currentConversation = useChatStore((state) => state.currentConversation);
 
     useEffect(() => {
         return () => {
@@ -21,11 +24,16 @@ export default function MessageInput() {
     }, []);
 
     const handleTyping = () => {
-        if (!currentChannel) return;
+        if (viewMode === 'channel' && !currentChannel) return;
+        if (viewMode === 'dm' && !currentConversation) return;
 
         if (!isTyping) {
             setIsTyping(true);
-            socketClient.emit('typing', { channelId: currentChannel._id, isTyping: true });
+            if (viewMode === 'channel' && currentChannel) {
+                socketClient.emit('typing', { channelId: currentChannel._id, isTyping: true });
+            } else if (viewMode === 'dm' && currentConversation) {
+                socketClient.emit('typing_dm', { conversationId: currentConversation._id, isTyping: true });
+            }
         }
 
         if (typingTimeoutRef.current) {
@@ -34,19 +42,32 @@ export default function MessageInput() {
 
         typingTimeoutRef.current = setTimeout(() => {
             setIsTyping(false);
-            socketClient.emit('typing', { channelId: currentChannel._id, isTyping: false });
+            if (viewMode === 'channel' && currentChannel) {
+                socketClient.emit('typing', { channelId: currentChannel._id, isTyping: false });
+            } else if (viewMode === 'dm' && currentConversation) {
+                socketClient.emit('typing_dm', { conversationId: currentConversation._id, isTyping: false });
+            }
         }, 1000);
     };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (!message.trim() || !currentChannel) return;
+        if (!message.trim()) return;
+        if (viewMode === 'channel' && !currentChannel) return;
+        if (viewMode === 'dm' && !currentConversation) return;
 
-        socketClient.emit('send_message', {
-            channelId: currentChannel._id,
-            content: message.trim()
-        });
+        if (viewMode === 'channel' && currentChannel) {
+            socketClient.emit('send_message', {
+                channelId: currentChannel._id,
+                content: message.trim()
+            });
+        } else if (viewMode === 'dm' && currentConversation) {
+            socketClient.emit('send_direct_message', {
+                conversationId: currentConversation._id,
+                content: message.trim()
+            });
+        }
 
         setMessage('');
         setIsTyping(false);
@@ -55,7 +76,11 @@ export default function MessageInput() {
             clearTimeout(typingTimeoutRef.current);
         }
 
-        socketClient.emit('typing', { channelId: currentChannel._id, isTyping: false });
+        if (viewMode === 'channel' && currentChannel) {
+            socketClient.emit('typing', { channelId: currentChannel._id, isTyping: false });
+        } else if (viewMode === 'dm' && currentConversation) {
+            socketClient.emit('typing_dm', { conversationId: currentConversation._id, isTyping: false });
+        }
     };
 
     const handleEmojiSelect = (emoji: string) => {
@@ -82,9 +107,12 @@ export default function MessageInput() {
         }
     };
 
-    if (!currentChannel) {
-        return null;
-    }
+    if (viewMode === 'channel' && !currentChannel) return null;
+    if (viewMode === 'dm' && !currentConversation) return null;
+
+    const placeholder = viewMode === 'channel'
+        ? `Message #${currentChannel?.name}`
+        : `Message @${currentConversation?.participants.find(p => p.username !== 'You')?.username || 'User'}`; // Simplified for now
 
     return (
         <div className="p-6 pt-3 pb-6 glass border-t-2 border-[var(--border)] z-20 bg-[var(--surface)]/40">
@@ -98,7 +126,7 @@ export default function MessageInput() {
                             handleTyping();
                         }}
                         onKeyDown={handleKeyDown}
-                        placeholder={`Message #${currentChannel.name}`}
+                        placeholder={placeholder}
                         className="w-full pl-6 pr-16 py-4 rounded-2xl bg-[var(--surface-light)] border-2 border-[var(--border)] text-white resize-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/20 transition-all placeholder-gray-500 shadow-inner font-medium"
                         rows={1}
                         style={{

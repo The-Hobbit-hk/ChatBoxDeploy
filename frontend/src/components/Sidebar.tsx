@@ -9,10 +9,12 @@ import socketClient from '@/lib/socket';
 
 import InviteModal from './InviteModal';
 import ChannelBrowser from './ChannelBrowser';
+import UserListModal from './UserListModal';
 
 export default function Sidebar() {
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showInviteModal, setShowInviteModal] = useState(false);
+    const [showUserListModal, setShowUserListModal] = useState(false);
     const [showChannelBrowser, setShowChannelBrowser] = useState(false);
     const [newChannelName, setNewChannelName] = useState('');
     const [newChannelDesc, setNewChannelDesc] = useState('');
@@ -26,6 +28,10 @@ export default function Sidebar() {
     const user = useAuthStore((state) => state.user);
     const logout = useAuthStore((state) => state.logout);
     const reset = useChatStore((state) => state.reset);
+    const conversations = useChatStore((state) => state.conversations);
+    const setConversations = useChatStore((state) => state.setConversations);
+    const currentConversation = useChatStore((state) => state.currentConversation);
+    const setCurrentConversation = useChatStore((state) => state.setCurrentConversation);
     const [isConnected, setIsConnected] = useState(false);
 
     useEffect(() => {
@@ -47,9 +53,26 @@ export default function Sidebar() {
         };
     }, []);
 
+    useEffect(() => {
+        const loadConversations = async () => {
+            try {
+                const { data } = await import('@/lib/api').then(m => m.conversationsAPI.getAll());
+                setConversations(data.conversations);
+            } catch (error) {
+                console.error('Failed to load conversations:', error);
+            }
+        };
+        loadConversations();
+    }, []);
+
     const handleChannelClick = (channel: any) => {
         setCurrentChannel(channel);
         socketClient.emit('join_channel', channel._id);
+    };
+
+    const handleConversationClick = (conversation: any) => {
+        setCurrentConversation(conversation);
+        socketClient.emit('join_conversation', conversation._id);
     };
 
     const handleCreateChannel = async (e: React.FormEvent) => {
@@ -169,6 +192,68 @@ export default function Sidebar() {
                             ))}
                         </div>
                     </div>
+
+                    {/* Direct Messages */}
+                    <div>
+                        <div className="flex items-center justify-between mb-3 px-2">
+                            <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Direct Messages</h2>
+                            <button
+                                onClick={() => setShowUserListModal(true)}
+                                className="text-gray-400 hover:text-[var(--primary)] transition-colors p-1 rounded-md hover:bg-[var(--surface-light)]"
+                                title="New Message"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div className="space-y-1">
+                            {conversations.map((conversation) => {
+                                const otherParticipant = conversation.participants.find(p => p._id !== user?._id) || conversation.participants[0];
+                                const isOnline = onlineUsers.includes(otherParticipant?._id);
+                                const isSelected = currentConversation?._id === conversation._id;
+
+                                return (
+                                    <button
+                                        key={conversation._id}
+                                        onClick={() => handleConversationClick(conversation)}
+                                        className={`w-full text-left px-4 py-3 rounded-xl transition-all duration-300 group relative overflow-hidden ${isSelected
+                                            ? 'bg-gradient-to-r from-[var(--primary)]/20 to-[var(--secondary)]/10 text-white border-2 border-[var(--primary)]/30 shadow-lg'
+                                            : 'text-gray-400 hover:bg-[var(--surface-light)] hover:text-gray-200 border-2 border-transparent hover:border-[var(--border-light)]'
+                                            }`}
+                                    >
+                                        <div className="flex items-center relative z-10">
+                                            <div className="relative mr-3">
+                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${isSelected
+                                                    ? 'bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] text-white shadow-lg'
+                                                    : 'bg-[var(--surface-lighter)] group-hover:bg-[var(--surface-hover)] text-gray-500 group-hover:text-gray-300'
+                                                    }`}>
+                                                    <span className="text-sm font-bold">{otherParticipant?.username.charAt(0).toUpperCase()}</span>
+                                                </div>
+                                                {isOnline && (
+                                                    <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 border-2 border-[var(--surface)] rounded-full"></div>
+                                                )}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="font-semibold truncate text-sm">{otherParticipant?.username}</div>
+                                                {conversation.lastMessage && (
+                                                    <div className="text-xs text-gray-500 truncate opacity-70">
+                                                        {conversation.lastMessage.sender === user?._id ? 'You: ' : ''}{conversation.lastMessage.content}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {isSelected && (
+                                                <div className="w-2 h-2 rounded-full bg-[var(--primary)] shadow-[0_0_10px_var(--primary)] animate-pulse"></div>
+                                            )}
+                                        </div>
+                                        {isSelected && (
+                                            <div className="absolute inset-0 bg-gradient-to-r from-[var(--primary)]/5 to-transparent opacity-50"></div>
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
                 </div>
 
                 {/* User Profile */}
@@ -271,6 +356,9 @@ export default function Sidebar() {
 
             {/* Channel Browser */}
             <ChannelBrowser isOpen={showChannelBrowser} onClose={() => setShowChannelBrowser(false)} />
+
+            {/* User List Modal */}
+            <UserListModal isOpen={showUserListModal} onClose={() => setShowUserListModal(false)} />
         </>
     );
 }

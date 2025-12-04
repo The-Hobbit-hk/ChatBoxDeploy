@@ -2,7 +2,7 @@ import express from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { Conversation } from '../models/Conversation';
 import { DirectMessage } from '../models/DirectMessage';
-import { User } from '../models/User';
+import User from '../models/User';
 
 const router = express.Router();
 
