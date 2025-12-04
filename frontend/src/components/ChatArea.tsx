@@ -154,7 +154,7 @@ export default function ChatArea() {
                 )}
 
                 {messages.map((message, index) => {
-                    const isOwnMessage = message.sender._id === user?.id;
+                    const isOwnMessage = message.sender._id === user?._id;
                     const showAvatar = index === 0 || messages[index - 1].sender._id !== message.sender._id;
                     const isLastMessage = index === messages.length - 1;
 
