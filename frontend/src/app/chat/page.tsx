@@ -64,11 +64,13 @@ export default function ChatPage() {
 
                 // Listen for new messages
                 socket.on('new_message', (message: any) => {
+                    console.log('Socket: Received new_message:', message);
                     addMessage(message);
                 });
 
                 // Listen for new channels
                 socket.on('new_channel', (channel: any) => {
+                    console.log('Socket: Received new_channel:', channel);
                     addChannel(channel);
                 });
 

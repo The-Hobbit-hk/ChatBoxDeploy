@@ -16,11 +16,11 @@ class SocketClient {
         });
 
         this.socket.on('connect', () => {
-            console.log('✅ WebSocket connected');
+            console.log('✅ WebSocket connected', this.socket?.id);
         });
 
-        this.socket.on('disconnect', () => {
-            console.log('❌ WebSocket disconnected');
+        this.socket.on('disconnect', (reason) => {
+            console.log('❌ WebSocket disconnected:', reason);
         });
 
         this.socket.on('connect_error', (error) => {

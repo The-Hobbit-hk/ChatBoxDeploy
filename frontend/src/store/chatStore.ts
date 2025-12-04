@@ -130,7 +130,17 @@ export const useChatStore = create<ChatState>((set) => ({
     setMessages: (messages) => set({ messages }),
 
     addMessage: (message) => set((state) => {
+        console.log('Store: Adding message:', message);
+        console.log('Store: Current channel:', state.currentChannel?._id);
+
+        // Only add if it belongs to the current channel
+        if (state.currentChannel && message.channel !== state.currentChannel._id) {
+            console.log('Store: Message ignored - belongs to different channel');
+            return state;
+        }
+
         if (state.messages.some(m => m._id === message._id)) {
+            console.log('Store: Message ignored - duplicate');
             return state;
         }
         return {

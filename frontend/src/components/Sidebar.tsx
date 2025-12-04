@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useChatStore } from '@/store/chatStore';
 import { useAuthStore } from '@/store/authStore';
 import { channelsAPI } from '@/lib/api';
@@ -26,6 +26,26 @@ export default function Sidebar() {
     const user = useAuthStore((state) => state.user);
     const logout = useAuthStore((state) => state.logout);
     const reset = useChatStore((state) => state.reset);
+    const [isConnected, setIsConnected] = useState(false);
+
+    useEffect(() => {
+        const socket = socketClient.getSocket();
+
+        const onConnect = () => setIsConnected(true);
+        const onDisconnect = () => setIsConnected(false);
+
+        if (socket?.connected) {
+            setIsConnected(true);
+        }
+
+        socketClient.on('connect', onConnect);
+        socketClient.on('disconnect', onDisconnect);
+
+        return () => {
+            socketClient.off('connect', onConnect);
+            socketClient.off('disconnect', onDisconnect);
+        };
+    }, []);
 
     const handleChannelClick = (channel: any) => {
         setCurrentChannel(channel);
@@ -73,7 +93,7 @@ export default function Sidebar() {
                             </div>
                             <h1 className="text-2xl font-bold gradient-text tracking-tight">Cosmic Chat</h1>
                         </div>
-                        <div className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_12px_rgba(34,197,94,0.6)]"></div>
+                        <div className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-green-500 shadow-[0_0_12px_rgba(34,197,94,0.6)]' : 'bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.6)]'} animate-pulse`} title={isConnected ? 'Connected' : 'Disconnected'}></div>
                     </div>
                     <div className="flex items-center justify-between">
                         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">

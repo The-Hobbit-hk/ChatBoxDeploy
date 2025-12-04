@@ -65,6 +65,8 @@ export const initializeSocket = (io: Server) => {
                 if (channel && channel.members.includes(userId as any)) {
                     socket.join(channelId);
                     console.log(`User ${userId} joined channel ${channelId}`);
+                } else {
+                    console.log(`User ${userId} failed to join channel ${channelId} (not a member or channel not found)`);
                 }
             } catch (error) {
                 console.error('Join channel error:', error);
@@ -103,6 +105,7 @@ export const initializeSocket = (io: Server) => {
                 await message.populate('sender', 'username email');
 
                 // Broadcast to all users in the channel
+                console.log(`Socket: Broadcasting message to channel ${channelId}`);
                 io.to(channelId).emit('new_message', message);
 
                 // Clear typing indicator for this user
